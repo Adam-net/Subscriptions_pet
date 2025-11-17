@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"log"
+	"strconv"
 	"time"
 
 	"database/sql"
@@ -114,7 +115,7 @@ func (p *PostgresDB) Create(sub Sub) (Sub, error) {
 	return sub, nil
 }
 
-func (p *PostgresDB) Read(id string) (Sub, error) {
+func (p *PostgresDB) Read(id int) (Sub, error) {
 	var sub Sub
 	err := p.db.QueryRow("SELECT * FROM subscriptions WHERE id = $1", id).Scan(&sub.ID, &sub.ServiceName, &sub.Cost, &sub.UserID, &sub.StartDate, &sub.EndDate)
 	if err != nil {
@@ -123,7 +124,7 @@ func (p *PostgresDB) Read(id string) (Sub, error) {
 	return sub, nil
 }
 
-func (p *PostgresDB) Update(id string, sub Sub) (Sub, error) {
+func (p *PostgresDB) Update(id int, sub Sub) (Sub, error) {
 	err := p.db.QueryRow(
 		"UPDATE subscriptions SET service_name = $1, cost = $2, start_date = $3, end_date = $4 WHERE id = $5 RETURNING *",
 		sub.ServiceName, sub.Cost, sub.StartDate, sub.EndDate, id).Scan(&sub.ID, &sub.ServiceName, &sub.Cost, &sub.UserID, &sub.StartDate, &sub.EndDate)
@@ -185,8 +186,10 @@ func (h *SubHandler) Create(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *SubHandler) Read(w http.ResponseWriter, r *http.Request) {
-	id := chi.URLParam(r, "id")
-
+	id, err := strconv.Atoi(chi.URLParam(r, "id"))
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+	}
 	sub, err := h.db.Read(id)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
@@ -201,9 +204,12 @@ func (h *SubHandler) Read(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *SubHandler) Update(w http.ResponseWriter, r *http.Request) {
-	id := chi.URLParam(r, "id")
+	id, err := strconv.Atoi(chi.URLParam(r, "id"))
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+	}
 	var sub Sub
-	err := json.NewDecoder(r.Body).Decode(&sub)
+	err = json.NewDecoder(r.Body).Decode(&sub)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
@@ -222,13 +228,12 @@ func (h *SubHandler) Update(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *SubHandler) Delete(w http.ResponseWriter, r *http.Request) {
-	var sub Sub
-	err := json.NewDecoder(r.Body).Decode(&sub)
+	id, err := strconv.Atoi(chi.URLParam(r, "id"))
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
 	}
-	err = h.db.Delete(sub.ID)
+
+	err = h.db.Delete(id)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
